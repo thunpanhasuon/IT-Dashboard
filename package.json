@@ -1,0 +1,20 @@
+{
+  "name": "help-desk-workspace",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix backend run build",
+    "start": "npm --prefix backend run start",
+    "start:dev": "npm --prefix backend run start:dev",
+    "test": "npm --prefix backend test",
+    "test:e2e": "npm --prefix backend run test:e2e",
+    "lint": "npm --prefix backend run lint"
+  },
+  "dependencies": {
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/typeorm": "^12.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "pg": "^8.23.1",
+    "typeorm": "^1.1.2"
+  }
+}
