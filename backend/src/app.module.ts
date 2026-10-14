@@ -7,6 +7,7 @@ import { AssetsModule } from './assets/assets.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
 import { StockroomModule } from './stockroom/stockroom.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
+import { AuthModule } from './auth/auth.module.js';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { TicketsModule } from './tickets/tickets.module.js';
         };
       },
     }),
+    AuthModule,
     AssetsModule,
     InventoryModule,
     StockroomModule,

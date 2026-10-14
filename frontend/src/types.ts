@@ -45,6 +45,27 @@ export interface CreateTicketInput {
   description: string;
 }
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface AuthSession {
+  accessToken: string;
+  user: AuthUser;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface RegisterInput extends LoginInput {
+  name: string;
+}
+
 export type CreateAssetInput = Omit<Asset, 'id' | 'lastUpdated'>;
 export type CreateInventoryInput = Omit<InventoryItem, 'id' | 'status' | 'lastUpdated'>;
 export type CreateStockInput = Omit<StockItem, 'id'>;

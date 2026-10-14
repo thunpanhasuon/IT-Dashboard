@@ -13,8 +13,13 @@ export class AssetsService {
 
   createAsset(dto: CreateAssetDto): Promise<Asset> {
     const asset = this.assetsRepository.create({
-      ...dto,
+      name: dto.name,
+      brand: dto.brand,
+      model: dto.model,
+      specs: dto.specs,
       assignedTo: dto.assignedTo ?? null,
+      status: dto.status,
+      location: dto.location,
     });
     return this.assetsRepository.save(asset);
   }

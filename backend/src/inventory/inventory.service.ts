@@ -21,7 +21,15 @@ export class InventoryService {
         : dto.quantity <= dto.reorderLevel
           ? InventoryStatus.LOW_STOCK
           : InventoryStatus.IN_STOCK;
-    const inventoryItem = this.inventoryRepository.create({ ...dto, status });
+    const inventoryItem = this.inventoryRepository.create({
+      name: dto.name,
+      category: dto.category,
+      quantity: dto.quantity,
+      reorderLevel: dto.reorderLevel,
+      unit: dto.unit,
+      location: dto.location,
+      status,
+    });
     return this.inventoryRepository.save(inventoryItem);
   }
 

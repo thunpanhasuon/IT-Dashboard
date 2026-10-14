@@ -11,7 +11,6 @@ import {
 import { TicketsService } from './tickets.service.js';
 import { CreateTicketDto } from './dto/create-ticket.dto.js';
 import { UpdateTicketDto } from './dto/update-ticket.dto.js';
-import { TicketStatus } from './entities/ticket.entity.js';
 
 @Controller('tickets')
 export class TicketsController {

@@ -1,4 +1,3 @@
-import { TicketStatus } from '../entities/ticket.entity.js';
 import { Transform } from 'class-transformer';
 import { IsString, Length } from 'class-validator';
 

@@ -9,6 +9,7 @@ A full-stack IT service management and help desk system for tracking support tic
 - **💻 Asset Registry**: Detailed device tracking, hardware assignments, specifications, and lifecycle management.
 - **📦 Inventory & Supply Control**: Monitor stock thresholds and consumables to ensure team readiness.
 - **🏢 Stockroom**: Manage spare parts and equipment across storage locations.
+- **🔐 Secure access**: Register and sign in with email/password before accessing help-desk data.
 
 ---
 
@@ -47,30 +48,36 @@ A full-stack IT service management and help desk system for tracking support tic
 ### 1. Backend Setup
 
 1. Navigate to the backend directory:
+
    ```bash
    cd backend
    ```
 
 2. Configure environment variables:
+
    ```bash
    cp .env.example .env
    ```
+
    Update `DATABASE_URL` in `.env` with your PostgreSQL credentials:
+
    ```env
    DATABASE_URL="postgresql://user:password@localhost:5432/it_dashboard"
    DATABASE_SSL="false"
+   JWT_SECRET="replace-with-at-least-32-random-characters"
    PORT="3000"
    ```
 
 3. Install dependencies:
+
    ```bash
    npm install
    ```
 
 4. Run database migrations:
+
    ```bash
-   npm run build
-   npx typeorm migration:run -d dist/src/data-source.js
+   npm run migration:run
    ```
 
 5. Start the backend server:
@@ -84,11 +91,13 @@ A full-stack IT service management and help desk system for tracking support tic
 ### 2. Frontend Setup
 
 1. In a new terminal, navigate to the frontend directory:
+
    ```bash
    cd frontend
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
@@ -103,17 +112,23 @@ A full-stack IT service management and help desk system for tracking support tic
 
 ## 🔌 API Endpoints
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/` | Health check |
-| `GET` | `/tickets` | List all support tickets |
-| `POST` | `/tickets` | Create a new ticket |
-| `GET` | `/assets` | List registered IT assets |
-| `POST` | `/assets` | Register an IT asset |
-| `GET` | `/inventory` | List inventory supplies |
-| `POST` | `/inventory` | Add or update inventory items |
-| `GET` | `/stockroom` | List stockroom items |
-| `POST` | `/stockroom` | Add stockroom items |
+| Method | Endpoint         | Description                                   |
+| ------ | ---------------- | --------------------------------------------- |
+| `GET`  | `/`              | Health check                                  |
+| `POST` | `/auth/register` | Create an account and receive an access token |
+| `POST` | `/auth/login`    | Sign in and receive an access token           |
+| `GET`  | `/auth/me`       | Return the signed-in user                     |
+| `GET`  | `/tickets`       | List all support tickets                      |
+| `POST` | `/tickets`       | Create a new ticket                           |
+| `GET`  | `/assets`        | List registered IT assets                     |
+| `POST` | `/assets`        | Register an IT asset                          |
+| `GET`  | `/inventory`     | List inventory supplies                       |
+| `POST` | `/inventory`     | Add or update inventory items                 |
+| `GET`  | `/stockroom`     | List stockroom items                          |
+| `POST` | `/stockroom`     | Add stockroom items                           |
+
+All endpoints except the health check, registration, and login require an
+`Authorization: Bearer <token>` header. Access tokens expire after eight hours.
 
 ---
 

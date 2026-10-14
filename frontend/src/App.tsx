@@ -9,6 +9,7 @@ import {
   Inbox,
   LayoutDashboard,
   LoaderCircle,
+  LogOut,
   PackageCheck,
   Plus,
   Search,
@@ -19,8 +20,11 @@ import {
 } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from './api';
+import { AuthScreen } from './AuthScreen';
 import type {
   Asset,
+  AuthSession,
+  AuthUser,
   InventoryItem,
   StockItem,
   Ticket,
@@ -28,6 +32,7 @@ import type {
 } from './types';
 
 type Workspace = 'home' | 'tickets' | 'assets' | 'inventory' | 'stockroom';
+const TOKEN_KEY = 'help-desk-access-token';
 
 const navigation = [
   {
@@ -79,6 +84,8 @@ const titleCase = (value: string) =>
   value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 function App() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [active, setActive] = useState<Workspace>('home');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -112,9 +119,53 @@ function App() {
     }
   };
 
+  const logout = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    api.setToken(null);
+    setAuthUser(null);
+    setTickets([]);
+    setAssets([]);
+    setInventory([]);
+    setStockroom([]);
+    setActive('home');
+  };
+
   useEffect(() => {
-    void loadData();
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      setCheckingAuth(false);
+      return;
+    }
+
+    api.setToken(token);
+    void api.getMe()
+      .then((user) => {
+        setAuthUser(user);
+        return loadData();
+      })
+      .catch(logout)
+      .finally(() => setCheckingAuth(false));
   }, []);
+
+  useEffect(() => {
+    window.addEventListener('auth:unauthorized', logout);
+    return () => window.removeEventListener('auth:unauthorized', logout);
+  }, []);
+
+  const finishAuthentication = (session: AuthSession) => {
+    localStorage.setItem(TOKEN_KEY, session.accessToken);
+    api.setToken(session.accessToken);
+    setAuthUser(session.user);
+    void loadData();
+  };
+
+  if (checkingAuth) {
+    return <div className="auth-loading"><LoaderCircle className="spin" size={28} /><span>Restoring your workspace…</span></div>;
+  }
+
+  if (!authUser) {
+    return <AuthScreen onAuthenticated={finishAuthentication} />;
+  }
 
   const selected = navigation.find((item) => item.id === active)!;
   const SelectedIcon = selected.icon;
@@ -246,7 +297,11 @@ function App() {
           <strong>{openTickets} tickets need attention</strong>
           <p>Keep the queue moving, one clear next step at a time.</p>
         </div>
-        <div className="sidebar-user"><span className="avatar">ST</span><div><strong>Support team</strong><small>Operations</small></div></div>
+        <div className="sidebar-user">
+          <span className="avatar">{authUser.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
+          <div><strong>{authUser.name}</strong><small>{authUser.email}</small></div>
+          <button className="logout-button" onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={16} /></button>
+        </div>
       </aside>
 
       <div className="app-main">
