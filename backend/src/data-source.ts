@@ -16,6 +16,6 @@ export default new DataSource({
   url: process.env.DATABASE_URL,
   ssl: (process.env.DATABASE_SSL ?? 'true') === 'true' ? { rejectUnauthorized: false } : false,
   entities: [Asset, InventoryItem, Stockroom, Ticket, User, LoginAttempt],
-  migrations: [import.meta.dirname + '/migrations/*{.ts,.js}'],
+  migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,
 });
