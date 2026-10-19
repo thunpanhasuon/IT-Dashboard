@@ -9,7 +9,7 @@ A full-stack IT service management and help desk system for tracking support tic
 - **💻 Asset Registry**: Detailed device tracking, hardware assignments, specifications, and lifecycle management.
 - **📦 Inventory & Supply Control**: Monitor stock thresholds and consumables to ensure team readiness.
 - **🏢 Stockroom**: Manage spare parts and equipment across storage locations.
-- **🔐 Secure access**: Register and sign in with email/password before accessing help-desk data.
+- **🔐 Secure access**: Administrator-only sign-in with database-backed brute-force protection.
 
 ---
 
@@ -65,6 +65,9 @@ A full-stack IT service management and help desk system for tracking support tic
    DATABASE_URL="postgresql://user:password@localhost:5432/it_dashboard"
    DATABASE_SSL="false"
    JWT_SECRET="replace-with-at-least-32-random-characters"
+   ADMIN_EMAIL="admin@example.com"
+   ADMIN_PASSWORD="replace-with-at-least-20-random-characters"
+   ADMIN_NAME="Administrator"
    PORT="3000"
    ```
 
@@ -115,7 +118,6 @@ A full-stack IT service management and help desk system for tracking support tic
 | Method | Endpoint         | Description                                   |
 | ------ | ---------------- | --------------------------------------------- |
 | `GET`  | `/api`              | Health check                                  |
-| `POST` | `/api/auth/register` | Create an account and receive an access token |
 | `POST` | `/api/auth/login`    | Sign in and receive an access token           |
 | `GET`  | `/api/auth/me`       | Return the signed-in user                     |
 | `GET`  | `/api/tickets`       | List all support tickets                      |
@@ -127,8 +129,11 @@ A full-stack IT service management and help desk system for tracking support tic
 | `GET`  | `/api/stockroom`     | List stockroom items                          |
 | `POST` | `/api/stockroom`     | Add stockroom items                           |
 
-All endpoints except the health check, registration, and login require an
+All endpoints except the health check and login require an
 `Authorization: Bearer <token>` header. Access tokens expire after eight hours.
+Public registration is disabled. Failed logins are rate-limited by both account
+and source IP using records stored in PostgreSQL, so protection is shared across
+serverless instances.
 
 ---
 

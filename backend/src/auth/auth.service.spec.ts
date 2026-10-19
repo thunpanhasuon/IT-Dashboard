@@ -1,77 +1,88 @@
 import { ConfigService } from '@nestjs/config';
-import type { Repository, SelectQueryBuilder } from 'typeorm';
+import type { Repository } from 'typeorm';
 import { AuthService } from './auth.service.js';
-import { User } from './entities/user.entity.js';
+import { LoginAttempt } from './entities/login-attempt.entity.js';
 
 describe('AuthService', () => {
-  const savedUser: User = {
-    id: '73aa887f-af1e-4ca8-99f2-47b8a55d109c',
-    name: 'Sam Taylor',
-    email: 'sam@example.com',
-    passwordHash: '',
-    createdAt: new Date('2026-10-14T00:00:00Z'),
-  };
+  const adminPassword = 'correct-horse-battery-staple-123';
 
   const createService = () => {
-    const createUser = vi.fn((value: Partial<User>) =>
-      Object.assign(new User(), savedUser, value),
-    );
-    const createQueryBuilder = vi.fn();
-    const repository = {
-      findOne: vi.fn().mockResolvedValue(null),
-      create: createUser,
-      save: vi.fn((value: User) => Promise.resolve(value)),
-      createQueryBuilder,
-    } as unknown as Repository<User>;
+    const attempts = {
+      count: vi.fn().mockResolvedValue(0),
+      create: vi.fn((value: Partial<LoginAttempt>) => value),
+      save: vi.fn((value: LoginAttempt) => Promise.resolve(value)),
+      delete: vi.fn().mockResolvedValue({ affected: 0, raw: [] }),
+    } as unknown as Repository<LoginAttempt>;
+    const configValues: Record<string, string> = {
+      JWT_SECRET: 'test-secret-that-is-at-least-32-characters',
+      ADMIN_EMAIL: 'admin@example.com',
+      ADMIN_PASSWORD: adminPassword,
+      ADMIN_NAME: 'Test Admin',
+    };
     const config = {
-      getOrThrow: vi
-        .fn()
-        .mockReturnValue('test-secret-that-is-at-least-32-characters'),
+      getOrThrow: vi.fn((key: string) => configValues[key]),
+      get: vi.fn((key: string, fallback: string) => configValues[key] ?? fallback),
     } as unknown as ConfigService;
+
     return {
-      service: new AuthService(repository, config),
-      createUser,
-      createQueryBuilder,
+      service: new AuthService(attempts, config),
+      attempts,
     };
   };
 
-  it('registers a user with a hashed password and returns a valid session', async () => {
-    const { service, createUser } = createService();
-    const session = await service.register({
-      name: '  Sam Taylor  ',
-      email: ' SAM@Example.com ',
-      password: 'password123',
-    });
+  it('signs in the configured administrator and returns a valid session', async () => {
+    const { service, attempts } = createService();
+    const session = await service.login(
+      { email: ' ADMIN@example.com ', password: adminPassword },
+      '203.0.113.10',
+    );
 
-    expect(session.user.email).toBe('sam@example.com');
+    expect(session.user.email).toBe('admin@example.com');
+    expect(session.user.name).toBe('Test Admin');
     expect(session.accessToken.split('.')).toHaveLength(3);
-    expect(service.verifyToken(session.accessToken).sub).toBe(savedUser.id);
-    const created = createUser.mock.calls[0][0] as User;
-    expect(created.passwordHash).toMatch(/^scrypt\$/);
-    expect(created.passwordHash).not.toContain('password123');
+    expect(service.verifyToken(session.accessToken).sub).toBe(session.user.id);
+    expect(attempts.delete).toHaveBeenCalledWith({
+      email: 'admin@example.com',
+    });
   });
 
-  it('rejects invalid credentials', async () => {
-    const { service, createQueryBuilder } = createService();
-    const queryBuilder = {
-      addSelect: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      getOne: vi.fn().mockResolvedValue(null),
-    } as unknown as SelectQueryBuilder<User>;
-    createQueryBuilder.mockReturnValue(queryBuilder);
+  it('records a failed login without revealing which credential was wrong', async () => {
+    const { service, attempts } = createService();
 
     await expect(
-      service.login({ email: 'nobody@example.com', password: 'password123' }),
+      service.login(
+        { email: 'nobody@example.com', password: 'wrong-password' },
+        '203.0.113.11',
+      ),
     ).rejects.toThrow('Invalid email or password');
+    expect(attempts.create).toHaveBeenCalledWith({
+      email: 'nobody@example.com',
+      ip: '203.0.113.11',
+    });
+    expect(attempts.save).toHaveBeenCalledOnce();
+  });
+
+  it('blocks an email after too many recent failures', async () => {
+    const { service, attempts } = createService();
+    vi.mocked(attempts.count)
+      .mockResolvedValueOnce(10)
+      .mockResolvedValueOnce(0);
+
+    await expect(
+      service.login(
+        { email: 'admin@example.com', password: adminPassword },
+        '203.0.113.12',
+      ),
+    ).rejects.toThrow('Too many login attempts');
+    expect(attempts.save).not.toHaveBeenCalled();
   });
 
   it('rejects a tampered token', async () => {
     const { service } = createService();
-    const session = await service.register({
-      name: 'Sam Taylor',
-      email: 'sam@example.com',
-      password: 'password123',
-    });
+    const session = await service.login(
+      { email: 'admin@example.com', password: adminPassword },
+      '203.0.113.13',
+    );
 
     expect(() =>
       service.verifyToken(`${session.accessToken.slice(0, -1)}x`),

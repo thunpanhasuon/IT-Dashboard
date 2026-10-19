@@ -62,10 +62,6 @@ export interface LoginInput {
   password: string;
 }
 
-export interface RegisterInput extends LoginInput {
-  name: string;
-}
-
 export type CreateAssetInput = Omit<Asset, 'id' | 'lastUpdated'>;
 export type CreateInventoryInput = Omit<InventoryItem, 'id' | 'status' | 'lastUpdated'>;
 export type CreateStockInput = Omit<StockItem, 'id'>;

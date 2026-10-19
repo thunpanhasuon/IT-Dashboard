@@ -1,4 +1,4 @@
-import type { Asset, CreateAssetInput, CreateInventoryInput, CreateStockInput, CreateTicketInput, InventoryItem, StockItem, Ticket, TicketStatus, AuthSession, AuthUser, LoginInput, RegisterInput } from './types';
+import type { Asset, CreateAssetInput, CreateInventoryInput, CreateStockInput, CreateTicketInput, InventoryItem, StockItem, Ticket, TicketStatus, AuthSession, AuthUser, LoginInput } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 let accessToken: string | null = null;
@@ -32,11 +32,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   setToken,
-  register: (input: RegisterInput) =>
-    request<AuthSession>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
   login: (input: LoginInput) =>
     request<AuthSession>('/auth/login', {
       method: 'POST',

@@ -1,81 +1,78 @@
 import {
-  ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { LessThan, MoreThanOrEqual, Repository } from 'typeorm';
 import { LoginDto } from './dto/login.dto.js';
-import { RegisterDto } from './dto/register.dto.js';
-import { User } from './entities/user.entity.js';
+import { LoginAttempt } from './entities/login-attempt.entity.js';
 import type { AuthUser, JwtPayload } from './auth.types.js';
 
 const TOKEN_LIFETIME_SECONDS = 60 * 60 * 8;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const RATE_LIMIT_RETENTION_MS = 24 * 60 * 60 * 1000;
+const MAX_FAILURES_PER_EMAIL = 10;
+const MAX_FAILURES_PER_IP = 25;
+const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
 
 @Injectable()
 export class AuthService {
   private readonly jwtSecret: string;
+  private readonly adminEmail: string;
+  private readonly adminName: string;
+  private readonly adminPasswordDigest: Buffer;
 
   constructor(
-    @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(LoginAttempt)
+    private readonly attempts: Repository<LoginAttempt>,
     config: ConfigService,
   ) {
     this.jwtSecret = config.getOrThrow<string>('JWT_SECRET');
     if (this.jwtSecret.length < 32) {
       throw new Error('JWT_SECRET must contain at least 32 characters');
     }
+
+    this.adminEmail = config
+      .getOrThrow<string>('ADMIN_EMAIL')
+      .trim()
+      .toLowerCase();
+    this.adminName = config.get<string>('ADMIN_NAME', 'Administrator').trim();
+    const adminPassword = config.getOrThrow<string>('ADMIN_PASSWORD');
+    if (adminPassword.length < 20) {
+      throw new Error('ADMIN_PASSWORD must contain at least 20 characters');
+    }
+    this.adminPasswordDigest = this.passwordDigest(adminPassword);
   }
 
-  async register(dto: RegisterDto) {
+  async login(dto: LoginDto, clientIp = 'unknown') {
     const email = dto.email.trim().toLowerCase();
-    if (await this.users.findOne({ where: { email } })) {
-      throw new ConflictException('An account with this email already exists');
-    }
+    const ip = clientIp.slice(0, 64) || 'unknown';
+    await this.enforceRateLimit(email, ip);
 
-    const user = this.users.create({
-      name: dto.name.trim(),
-      email,
-      passwordHash: await this.hashPassword(dto.password),
-    });
+    const passwordDigest = this.passwordDigest(dto.password);
+    const validCredentials =
+      email === this.adminEmail &&
+      passwordDigest.length === this.adminPasswordDigest.length &&
+      timingSafeEqual(passwordDigest, this.adminPasswordDigest);
 
-    try {
-      const saved = await this.users.save(user);
-      return this.createSession(saved);
-    } catch (error) {
-      if (this.isUniqueViolation(error)) {
-        throw new ConflictException(
-          'An account with this email already exists',
-        );
-      }
-      throw error;
-    }
-  }
-
-  async login(dto: LoginDto) {
-    const user = await this.users
-      .createQueryBuilder('user')
-      .addSelect('user.passwordHash')
-      .where('LOWER(user.email) = :email', {
-        email: dto.email.trim().toLowerCase(),
-      })
-      .getOne();
-
-    if (
-      !user ||
-      !(await this.verifyPassword(dto.password, user.passwordHash))
-    ) {
+    if (!validCredentials) {
+      await this.recordFailure(email, ip);
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    return this.createSession(user);
+    await this.attempts.delete({ email });
+    return this.createSession(this.getAdminUser());
   }
 
-  async getUser(userId: string): Promise<AuthUser> {
-    const user = await this.users.findOne({ where: { id: userId } });
-    if (!user) throw new UnauthorizedException('Account no longer exists');
-    return this.toAuthUser(user);
+  getUser(userId: string): AuthUser {
+    if (userId !== ADMIN_ID) {
+      throw new UnauthorizedException('Account no longer exists');
+    }
+    return this.getAdminUser();
   }
 
   verifyToken(token: string): JwtPayload {
@@ -98,17 +95,15 @@ export class AuthService {
 
       const header = JSON.parse(
         Buffer.from(encodedHeader, 'base64url').toString(),
-      ) as {
-        alg?: string;
-        typ?: string;
-      };
+      ) as { alg?: string; typ?: string };
       const payload = JSON.parse(
         Buffer.from(encodedPayload, 'base64url').toString(),
       ) as JwtPayload;
       if (
         header.alg !== 'HS256' ||
         header.typ !== 'JWT' ||
-        typeof payload.sub !== 'string' ||
+        payload.sub !== ADMIN_ID ||
+        payload.email !== this.adminEmail ||
         typeof payload.exp !== 'number' ||
         payload.exp <= Math.floor(Date.now() / 1000)
       ) {
@@ -120,7 +115,43 @@ export class AuthService {
     }
   }
 
-  private createSession(user: User) {
+  private async enforceRateLimit(email: string, ip: string) {
+    const attemptedAt = MoreThanOrEqual(
+      new Date(Date.now() - RATE_LIMIT_WINDOW_MS),
+    );
+    const [emailFailures, ipFailures] = await Promise.all([
+      this.attempts.count({ where: { email, attemptedAt } }),
+      this.attempts.count({ where: { ip, attemptedAt } }),
+    ]);
+
+    if (
+      emailFailures >= MAX_FAILURES_PER_EMAIL ||
+      ipFailures >= MAX_FAILURES_PER_IP
+    ) {
+      throw new HttpException(
+        'Too many login attempts. Try again in 15 minutes.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private async recordFailure(email: string, ip: string) {
+    await this.attempts.save(this.attempts.create({ email, ip }));
+    await this.attempts.delete({
+      attemptedAt: LessThan(new Date(Date.now() - RATE_LIMIT_RETENTION_MS)),
+    });
+  }
+
+  private getAdminUser(): AuthUser {
+    return {
+      id: ADMIN_ID,
+      name: this.adminName,
+      email: this.adminEmail,
+      createdAt: new Date(0),
+    };
+  }
+
+  private createSession(user: AuthUser) {
     const now = Math.floor(Date.now() / 1000);
     const payload: JwtPayload = {
       sub: user.id,
@@ -135,17 +166,12 @@ export class AuthService {
 
     return {
       accessToken: `${unsignedToken}.${this.sign(unsignedToken)}`,
-      user: this.toAuthUser(user),
+      user,
     };
   }
 
-  private toAuthUser(user: User): AuthUser {
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      createdAt: user.createdAt,
-    };
+  private passwordDigest(password: string) {
+    return createHmac('sha256', this.jwtSecret).update(password).digest();
   }
 
   private encode(value: object) {
@@ -156,38 +182,5 @@ export class AuthService {
     return createHmac('sha256', this.jwtSecret)
       .update(value)
       .digest('base64url');
-  }
-
-  private async hashPassword(password: string) {
-    const salt = randomBytes(16).toString('hex');
-    const key = await this.deriveKey(password, salt);
-    return `scrypt$${salt}$${key.toString('hex')}`;
-  }
-
-  private async verifyPassword(password: string, stored: string) {
-    const [algorithm, salt, hash] = stored.split('$');
-    if (algorithm !== 'scrypt' || !salt || !hash) return false;
-    const expected = Buffer.from(hash, 'hex');
-    const received = await this.deriveKey(password, salt);
-    return (
-      expected.length === received.length && timingSafeEqual(expected, received)
-    );
-  }
-
-  private deriveKey(password: string, salt: string): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      scrypt(password, salt, 64, (error, key) =>
-        error ? reject(error) : resolve(key),
-      );
-    });
-  }
-
-  private isUniqueViolation(error: unknown) {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === '23505'
-    );
   }
 }
