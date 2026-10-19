@@ -114,18 +114,18 @@ A full-stack IT service management and help desk system for tracking support tic
 
 | Method | Endpoint         | Description                                   |
 | ------ | ---------------- | --------------------------------------------- |
-| `GET`  | `/`              | Health check                                  |
-| `POST` | `/auth/register` | Create an account and receive an access token |
-| `POST` | `/auth/login`    | Sign in and receive an access token           |
-| `GET`  | `/auth/me`       | Return the signed-in user                     |
-| `GET`  | `/tickets`       | List all support tickets                      |
-| `POST` | `/tickets`       | Create a new ticket                           |
-| `GET`  | `/assets`        | List registered IT assets                     |
-| `POST` | `/assets`        | Register an IT asset                          |
-| `GET`  | `/inventory`     | List inventory supplies                       |
-| `POST` | `/inventory`     | Add or update inventory items                 |
-| `GET`  | `/stockroom`     | List stockroom items                          |
-| `POST` | `/stockroom`     | Add stockroom items                           |
+| `GET`  | `/api`              | Health check                                  |
+| `POST` | `/api/auth/register` | Create an account and receive an access token |
+| `POST` | `/api/auth/login`    | Sign in and receive an access token           |
+| `GET`  | `/api/auth/me`       | Return the signed-in user                     |
+| `GET`  | `/api/tickets`       | List all support tickets                      |
+| `POST` | `/api/tickets`       | Create a new ticket                           |
+| `GET`  | `/api/assets`        | List registered IT assets                     |
+| `POST` | `/api/assets`        | Register an IT asset                          |
+| `GET`  | `/api/inventory`     | List inventory supplies                       |
+| `POST` | `/api/inventory`     | Add or update inventory items                 |
+| `GET`  | `/api/stockroom`     | List stockroom items                          |
+| `POST` | `/api/stockroom`     | Add stockroom items                           |
 
 All endpoints except the health check, registration, and login require an
 `Authorization: Bearer <token>` header. Access tokens expire after eight hours.
